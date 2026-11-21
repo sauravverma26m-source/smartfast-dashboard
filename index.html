@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SmartFast Dynamic Forecast Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--bg:#f6f8fb;--card:#fff;--ink:#14213d;--mute:#5a6b7b;--line:#dde4ec;--navy:#1f3864;--trad:#c0392b;--ai:#1f77b4;--good:#1b7f4a;--bad:#c0392b}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0f1722;--card:#17212f;--ink:#e8eef6;--mute:#9bb0c4;--line:#2a3a4d;--navy:#8fb3ee;--trad:#ef7b6e;--ai:#5fb0ee;--good:#58c28a;--bad:#ef7b6e}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:22px;margin:0 0 4px;color:var(--navy)}p.sub{margin:0 0 18px;color:var(--mute)}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+.levers{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:18px}
+.lever label{display:flex;justify-content:space-between;font-weight:600;font-size:14px}.lever output{color:var(--navy);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;margin:8px 0 2px}.hint{font-size:12px;color:var(--mute)}
+button{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
+@media(prefers-color-scheme:dark){button{color:#0f1722}}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{border:1px solid var(--line);border-radius:10px;padding:10px 12px}.kpi .n{font-size:12px;color:var(--mute)}.kpi .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.kpi .d{font-size:12px;color:var(--mute)}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14px}th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right}th:first-child,td:first-child{text-align:left}
+th{color:var(--mute);font-weight:600}.t{color:var(--trad);font-weight:700}.a{color:var(--ai);font-weight:700}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}.cv{position:relative;height:300px}
+.foot{font-size:12px;color:var(--mute);margin-top:10px}
+</style></head><body><div class="wrap">
+<h1>SmartFast Components &ndash; Dynamic Forecast Dashboard</h1>
+<p class="sub">Budget forecast Nov-26 to Oct-27 (&#8377; lakh). Move the levers to test scenarios; traditional and AI-based forecasts update together. Simulated data for a hypothetical firm.</p>
+<div class="panel"><div class="levers">
+<div class="lever"><label>Sales change vs base forecast <output id="o1">0%</output></label><input id="s1" type="range" min="-20" max="20" step="1" value="0"><div class="hint">e.g. &minus;10% = a weak demand year</div></div>
+<div class="lever"><label>Variable cost ratio change <output id="o2">0.0 pts</output></label><input id="s2" type="range" min="-5" max="5" step="0.5" value="0"><div class="hint">percentage points; +2 = dearer steel</div></div>
+<div class="lever"><label>Fixed cost change <output id="o3">0%</output></label><input id="s3" type="range" min="-10" max="20" step="1" value="0"><div class="hint">e.g. +5% = wage revision</div></div>
+</div><div style="margin-top:12px"><button id="reset">Reset to base case</button></div></div>
+<div class="panel"><table id="tbl"></table></div>
+<div class="panel kpis" id="kpis"></div>
+<div class="charts"><div class="panel"><b>Monthly sales</b><div class="cv"><canvas id="c1"></canvas></div></div><div class="panel"><b>Monthly profit</b><div class="cv"><canvas id="c2"></canvas></div></div></div>
+<p class="foot">Method: traditional = linear trend, 12-month average variable cost ratio, fixed cost held flat. AI-based = ridge regression on log-sales with trend and seasonality, damped cost-ratio drift. Break-even = monthly fixed cost &divide; (1 &minus; variable cost ratio); margin of safety on forecast sales.</p>
+</div>
+<script>
+const DATA={"hist": {"months": ["Nov-25", "Dec-25", "Jan-26", "Feb-26", "Mar-26", "Apr-26", "May-26", "Jun-26", "Jul-26", "Aug-26", "Sep-26", "Oct-26"], "sales": [34.45, 34.1, 32.63, 35.26, 38.15, 33.2, 35.86, 35.39, 35.44, 38.57, 39.58, 40.53], "profit": [2.31, 2.28, 1.7, 2.74, 3.73, 1.55, 2.54, 1.93, 1.71, 2.81, 2.83, 3.14]}, "months": ["Nov-26", "Dec-26", "Jan-27", "Feb-27", "Mar-27", "Apr-27", "May-27", "Jun-27", "Jul-27", "Aug-27", "Sep-27", "Oct-27"], "trad": {"sales": [39.575303030303, 40.1104778554779, 40.6456526806527, 41.1808275058275, 41.7160023310023, 42.2511771561772, 42.786351981352, 43.3215268065268, 43.8567016317016, 44.3918764568765, 44.9270512820513, 45.4622261072261], "ratio": 0.611113676239727, "fixed": [11.74, 11.74, 11.74, 11.74, 11.74, 11.74, 11.74, 11.74, 11.74, 11.74, 11.74, 11.74]}, "ai": {"sales": [41.8211317464989, 42.7640855270832, 43.3312030415745, 43.5676380035491, 43.6186688803561, 43.6843974241846, 43.9629944155612, 44.6017623523575, 45.6644912881741, 47.1154688537553, 48.8206195783615, 50.5705302245827], "ratio": [0.631460398277007, 0.633291879259502, 0.634757064045498, 0.635929211874295, 0.636866930137332, 0.637617104747762, 0.638217244436106, 0.638697356186781, 0.639081445587321, 0.639388717107754, 0.639634534324099, 0.639831188097176], "fixed": [11.74, 11.74, 11.74, 11.74, 11.74, 11.74, 11.74, 11.74, 11.74, 11.74, 11.74, 11.74]}, "actual12": {"sales": 433.16, "profit": 29.27}};
+const $=id=>document.getElementById(id), f1=v=>v.toFixed(1), pc=v=>(v*100).toFixed(1)+'%';
+function calc(){
+ const s=+$('s1').value/100, r=+$('s2').value/100, fx=+$('s3').value/100;
+ $('o1').textContent=(s>0?'+':'')+(s*100).toFixed(0)+'%';$('o2').textContent=(r>0?'+':'')+(r*100).toFixed(1)+' pts';$('o3').textContent=(fx>0?'+':'')+(fx*100).toFixed(0)+'%';
+ const out={};
+ for(const k of ['trad','ai']){
+  const sales=DATA[k].sales.map(v=>v*(1+s));
+  const vc=sales.map((v,i)=>v*Math.max(0,(k=='trad'?DATA.trad.ratio:DATA.ai.ratio[i])+r));
+  const fixed=DATA[k].fixed.map(v=>v*(1+fx));
+  const profit=sales.map((v,i)=>v-vc[i]-fixed[i]);
+  const sum=a=>a.reduce((x,y)=>x+y,0);
+  const S=sum(sales),V=sum(vc),F=sum(fixed),P=S-V-F,cm=1-V/S,be=(F/12)/cm;
+  out[k]={sales,vc,fixed,profit,S,V,F,P,margin:P/S,be,mos:(S/12-be)/(S/12)};
+ }
+ return out;
+}
+let c1,c2;
+function render(){
+ const o=calc(), A=o.trad,B=o.ai;
+ const rows=[['Sales',A.S,B.S],['Variable costs',A.V,B.V],['Fixed costs',A.F,B.F],['Total expenses',A.V+A.F,B.V+B.F],['Profit',A.P,B.P]];
+ $('tbl').innerHTML='<tr><th>Nov-26 to Oct-27 (&#8377; lakh)</th><th class="t">Traditional</th><th class="a">AI-based</th><th>Last 12 months (actual)</th></tr>'+
+  rows.map((r,i)=>`<tr><td${i==4?' style="font-weight:700"':''}>${r[0]}</td><td>${f1(r[1])}</td><td>${f1(r[2])}</td><td>${i==0?f1(DATA.actual12.sales):i==4?f1(DATA.actual12.profit):i==3?f1(DATA.actual12.sales-DATA.actual12.profit):''}</td></tr>`).join('');
+ const k=(n,t,a,fmt,d)=>`<div class="kpi"><div class="n">${n}</div><div class="v"><span class="t">${fmt(t)}</span> / <span class="a">${fmt(a)}</span></div><div class="d">${d}</div></div>`;
+ $('kpis').innerHTML=k('Profit (&#8377; lakh)',A.P,B.P,f1,'traditional / AI')+k('Profit margin',A.margin,B.margin,pc,'traditional / AI')+k('Break-even sales / month',A.be,B.be,f1,'&#8377; lakh')+k('Margin of safety',A.mos,B.mos,pc,'on forecast sales');
+ const lab=[...DATA.hist.months,...DATA.months], pad=Array(12).fill(null);
+ const mk=(id,old,ds,yt)=>{ if(old) old.destroy(); const cs=getComputedStyle(document.documentElement);
+  return new Chart($(id),{type:'line',data:{labels:lab,datasets:ds},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom'}},scales:{y:{title:{display:true,text:yt}},x:{ticks:{maxTicksLimit:8}}}}});};
+ const tr=getComputedStyle(document.documentElement).getPropertyValue('--trad').trim()||'#c0392b', ai=getComputedStyle(document.documentElement).getPropertyValue('--ai').trim()||'#1f77b4', ink=getComputedStyle(document.documentElement).getPropertyValue('--ink').trim()||'#14213d';
+ c1=mk('c1',c1,[{label:'Actual',data:[...DATA.hist.sales,...pad],borderColor:ink,pointRadius:2,tension:0},{label:'Traditional',data:[...pad,...A.sales],borderColor:tr,pointRadius:2,tension:0},{label:'AI-based',data:[...pad,...B.sales],borderColor:ai,pointRadius:2,tension:0}],'Sales (₹ lakh)');
+ c2=mk('c2',c2,[{label:'Actual',data:[...DATA.hist.profit,...pad],borderColor:ink,pointRadius:2,tension:0},{label:'Traditional',data:[...pad,...A.profit],borderColor:tr,pointRadius:2,tension:0},{label:'AI-based',data:[...pad,...B.profit],borderColor:ai,pointRadius:2,tension:0}],'Profit (₹ lakh)');
+}
+['s1','s2','s3'].forEach(i=>$(i).addEventListener('input',render));
+$('reset').onclick=()=>{['s1','s2','s3'].forEach(i=>$(i).value=0);render()};
+render();
+</script></body></html>
